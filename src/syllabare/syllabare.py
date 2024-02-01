@@ -27,7 +27,7 @@ unexpected results. In such cases, the use of boundaries can provide
 more control over the searches, at the expense of requiring slightly 
 more complicated regular expression patterns. To use boundaries, pass in
 `boundaries=True` to any function, indicate the boundary delimiter with
-the `delimiter` keywork argument (';' by default), and then include the
+the `delimiter` keyword argument (';' by default), and then include the
 delimiter in search pattern and/or replacement argument. The delimiter
 should not be included in the input string, as it will be added
 automatically. Note that when the search string contains characters not 
