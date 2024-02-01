@@ -16,7 +16,7 @@ mapped back to their position in REP1 and returned as a Syllabare_Match
 object, or as the relevant substrings, depending on the return type of
 the underlying re function. In the case of substitutions, substituted 
 portions are mapped back to characters available in REP1, when possible.
-Syllabre_Match objects are designed to behave like re.Match objects, 
+Syllabare_Match objects are designed to behave like re.Match objects, 
 with a few additional attributes.  As such, the output of this library 
 may usually be handled in the same manner as the output of the standard 
 re library. 
