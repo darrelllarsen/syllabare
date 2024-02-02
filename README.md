@@ -20,3 +20,31 @@ re library.
 Most functionality is documented in the [re documentation](https://docs.python.org/3/library/re.html).
 
 Documentation on the unique features of syllabare is available in the [wiki](https://github.com/darrelllarsen/syllabare/wiki), where you will (eventually) also find discussion of inherent differences between `re` and `syllabare`, and how syllabare addresses them. (At present, see the [Special Considerations](https://github.com/darrelllarsen/kre/wiki#special-considerations-differences-from-re) section of the related project, kre, for relevant discussion.) *It is strongly recommended that users familiarize themselves with these differences.*
+
+## Examples
+
+Japanese Hiragana (mapping between hiragana and romanizaed hiragana)
+```
+> import syllabare as syl
+> syl.set_map('maps/hiragana.json')
+
+> # Find all symbols containing the 'O' sound
+> syl.findall(r'O', 'いろはにほへと')
+['ろ', 'ほ', 'と']
+> # Replace the 'O' sound with 'A'
+> syl.sub(r'O', r'A', 'いろはにほへと')
+'いらはにはへた'
+```
+
+IPA symbols (mapping between phonetics symbols and feature descriptions)
+```
+> import syllabare as syl
+> syl.set_map('maps/ipa.json')
+
+> # Substitute voiceless (vl) sounds with their voiced (vd) counterparts
+> syl.sub(r'vl', r'vd', 'tɛstɪŋ')
+'dɛzdɪŋ'
+> # Change the place of articulation
+> syl.sub(r'alveolar', r'velar', 'tɛstɪŋ')
+'kɛxkɪŋ'
+```
