@@ -148,7 +148,7 @@ def compile(pattern, flags=0):
 
 def purge():
     # note that this will purge all regular expression caches, 
-    # not just those created through syllabare
+    # not just those created through kre
     re.purge()
 
 def escape(pattern):
@@ -161,9 +161,15 @@ def _compile(pattern, flags):
 
 class Syllabare_Pattern:
     def __init__(self, pattern, flags):
-        self.pattern = pattern #original, unlinearized
+        self.pattern = pattern #original Korean, unlinearized
         self.flags = flags
-        self.linear = self.pattern # REDUNDANT - TO BE REMOVED
+
+        # If also mapping pattern, need to ensure no overlap in REP1 and
+        # REP2
+        #self.mapping = Mapping(pattern)
+        #self.linear = self.mapping.linear #linear input to compile
+        #self.Pattern = re.compile(self.linear, flags) # re.Pattern obj
+
         self.Pattern = re.compile(self.pattern, flags) # re.Pattern obj
         self.groups = self.Pattern.groups
 
@@ -179,17 +185,18 @@ class Syllabare_Pattern:
         return "syllabare.compile(%s)" % repr(self.pattern)
 
     def search(self, string, *args, boundaries=False, delimiter=';', empty_es=True):
-        ls, pos_args, _ = self._process(string, *args,
-                boundaries=boundaries, delimiter=delimiter)
+        ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
 
+        return self._search(ls, *args, empty_es=empty_es)
+
+    def _search(self, string_mapping, *args, empty_es=True):
+        ls = string_mapping
+        pos_args, iter_span = self._process_pos_args(ls, *args)
         match_ = self.Pattern.search(ls.linear, *pos_args)
 
         if match_:
-            return _make_match_object(self.pattern, string, match_,
-                    *args,
-                    boundaries=boundaries,
-                    delimiter=delimiter, empty_es=empty_es,
-                    )
+            return _make_match_object(self, ls, match_,
+                    *args, empty_es=empty_es)
         else:
             return match_
 
@@ -200,11 +207,8 @@ class Syllabare_Pattern:
         for span in iter_span:
             match_ = self.Pattern.match(ls.linear, *span)
             if match_:
-                return _make_match_object(self.pattern, string, match_,
-                        *args,
-                        boundaries=boundaries,
-                        delimiter=delimiter, empty_es=empty_es,
-                        )
+                return _make_match_object(self, ls, match_,
+                        *args, empty_es=empty_es)
         else:
             return match_
 
@@ -215,11 +219,8 @@ class Syllabare_Pattern:
         for span in iter_span:
             match_ = self.Pattern.fullmatch(ls.linear, *span)
             if match_:
-                return _make_match_object(self.pattern, string, match_,
-                        *args,
-                        boundaries=boundaries,
-                        delimiter=delimiter, empty_es=empty_es,
-                        )
+                return _make_match_object(self, ls, match_,
+                        *args, empty_es=empty_es)
         else:
             return match_
 
@@ -240,13 +241,20 @@ class Syllabare_Pattern:
                     boundaries prior to syllabifying string)
         """
         # Linearize string
-        ls = Mapping(string, 
-                boundaries=boundaries,
-                delimiter=delimiter,
-                    )
+        ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
+
+        return self._sub(repl, ls, count=count, empty_es=empty_es,
+                syllabify=syllabify)
+
+    def _sub(self, repl, string_mapping, count=0, empty_es=True, 
+            syllabify='minimal'):
+        ls = string_mapping
+        boundaries = string_mapping.boundaries
+        delimiter = string_mapping.delimiter
         
         # Find the spans where substitutions will occur.
-        matches = self.finditer(ls.linear)
+        matches = self.finditer(ls.original, boundaries=boundaries,
+                delimiter=delimiter)
 
         # Iterate over matches to extract subbed spans from delimited string
 
@@ -262,39 +270,76 @@ class Syllabare_Pattern:
         
         i = 0 # number non-overlapping sub spans (no increment for shared syllable)
         for n, match_ in enumerate(matches):
+
             # limit matches to number indicated by count (0=no limit)
             if 0 < count <= n:
                 break
-            span = match_.span()
+
+            #span = match_.span()
+            map_ = match_.string_mapping
+            orig_span = match_.span()
+            lin_span = match_.Match.span()
+            del_span = (map_.lin2del[lin_span[0]],
+                    map_.lin2del[lin_span[1]-1]+1)
+
+            orig_string = match_.string
+            lin_string = match_.Match.string
+            del_string = match_.string_mapping.delimited
+           
+            """
+            # FOR DEBUGGING
+            print_dict = [
+                    {"level": "orig", 
+                        "span": orig_span,
+                        "match": orig_string[slice(*orig_span)],
+                        "string": orig_string,
+                        },
+                    {"level": "del",
+                        "span": del_span, 
+                        "match": del_string[slice(*del_span)],
+                        "string": del_string,
+                        },
+                    {"level": "linear", 
+                        "span": lin_span, 
+                        "match": lin_string[slice(*lin_span)],
+                        "string": lin_string,
+                        },
+                    ]
+            print('\t'.join(key for key in print_dict[0].keys()))
+            for item in print_dict:
+                print('\t'.join(str(val) for val in item.values()))
+            print('-'*30)
+            """
 
             # Case of empty string match at end of string
-            if span[0] == len(ls.linear):
-                start = len(ls.linear)
+            #if span[0] == len(ls.linear):
+            #    start = len(ls.linear) # why linear and not del, like below?
             # Normal case
-            else:
-                start = ls.lin2del[span[0]]
-            end = ls.lin2del[span[1]-1]+1
+            #else:
+            #    start = ls.lin2del[span[0]]
+            #end = ls.lin2del[span[1]-1]+1
+
 
             # Were there multiple subs from the same syllable?
-            if i > 0 and subs[i-1]['del_span'][1] > start:
+            if i > 0 and subs[i-1]['del_span'][1] > del_span[0]:
                 # increment number of subs for this syllable
                 subs[i-1]['num_subs'] += 1
 
                 # update the end pos of the affected del_span
                 subs[i-1]['del_span'] = (
-                        subs[i-1]['del_span'][0], end)
+                        subs[i-1]['del_span'][0], del_span[1])
 
                 # update the end pos of the associated linear_span
                 subs[i-1]['linear_span'] = (
-                        subs[i-1]['linear_span'][0], span[1])
+                        subs[i-1]['linear_span'][0], lin_span[1])
             else:
                 subs[i] = dict()
                 sub = subs[i]
                 sub['num_subs'] = 1
-                sub['del_span'] = (start, end)
-                sub['linear_span'] = span
+                sub['del_span'] = del_span
+                #sub['linear_span'] = span
+                sub['linear_span'] = lin_span#match_.Match.span()
                 i += 1
-
         # Keep track of extra letters in the subbed syllables which
         # preceded/followed the actual substitution
         for sub in subs.values():
@@ -369,7 +414,7 @@ class Syllabare_Pattern:
                     if output:
                         pre = output[-1]
                         output = output[:-1]
-                        post = _recombine(pre)
+                        pre = _recombine(pre)
                         new_text = pre + new_text
                     output += _recombine(new_text)
                 else:
@@ -390,11 +435,13 @@ class Syllabare_Pattern:
 
     def subn(self, repl, string, count=0, boundaries=False, 
             delimiter=';', empty_es=True, syllabify='minimal'):
+        ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
         
         # Must limit substitutions to max of count if != 0
-        res = self.findall(string,
-            boundaries=boundaries, delimiter=delimiter,
-            empty_es=empty_es)
+        res = self._findall(ls, empty_es=empty_es)
+        #res = self.findall(string,
+        #    boundaries=boundaries, delimiter=delimiter,
+        #    empty_es=empty_es)
         if res:
             sub_count = len(res)
         else:
@@ -402,18 +449,21 @@ class Syllabare_Pattern:
         if 0 < count < sub_count:
             sub_count = count
 
-        return (self.sub(repl, string, count=count, 
-            boundaries=boundaries, delimiter=delimiter,
-            empty_es=empty_es, syllabify=syllabify), 
-            sub_count)
+        return (self._sub(repl, ls, count=count, empty_es=empty_es, 
+            syllabify=syllabify), sub_count)
 
     def split(self, string, maxsplit=0, boundaries=False, 
             delimiter=';', empty_es=True):
         raise NotImplementedError 
 
     def findall(self, string, *args, boundaries=False, delimiter=';', empty_es=True):
-        ls, pos_args, _ = self._process(string, *args,
-                boundaries=boundaries, delimiter=delimiter)
+        ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
+        return self._findall(ls, *args, empty_es=empty_es)
+
+    def _findall(self, string_mapping, *args, empty_es=True):
+        ls = string_mapping
+        string = ls.original
+        pos_args, _ = self._process_pos_args(ls, *args)
 
         match_ = self.Pattern.findall(ls.linear, *pos_args)
 
@@ -423,13 +473,11 @@ class Syllabare_Pattern:
             pos = pos_args[0]
             match_list = []
             for item in match_:
-                # Because we've already linearized the string, we don't
-                # pass in boundaries or delimiter here.
-                sub_match = self.search(ls.linear, pos)
+                sub_match = self.Pattern.search(ls.linear, pos)
 
                 source_string_span = _get_regs(sub_match, ls)[0]
                 match_list.append(
-                        string[source_string_span[0]:source_string_span[1]]
+                        string[slice(*source_string_span)]
                         )
 
                 # Update start pos for next iteration.
@@ -459,10 +507,8 @@ class Syllabare_Pattern:
             pos = pos_args[0]
             match_list = []
             for item in match_:
-                sub_match = self.search(ls.linear, pos)
-                match_list.append(_make_match_object(self.pattern, string, 
-                    sub_match, *args, boundaries=boundaries,
-                    delimiter=delimiter, empty_es=empty_es))
+                sub_match = self._search(ls, pos)
+                match_list.append(sub_match)
                 pos = sub_match.span()[1]
 
                 # Was the match an empty string?
@@ -678,6 +724,7 @@ class Mapping:
 
         for char_ in self.delimited:
             if char_ in MAPS["map"].keys():
+                
                 # append the linearized string
                 for letter in MAPS["map"][char_]:
                     lin_str += letter
@@ -815,8 +862,7 @@ class Mapping:
                     '\t', self.delimited[slice(*self.lin2del_span[n])],
                     '\t\t', self.lin2orig[n], '\t\t', span_,'\t', self.original[slice(*span_)])
 
-def _make_match_object(pattern, string, Match, *args, boundaries=False, 
-        delimiter=';', empty_es=True):
+def _make_match_object(pattern_obj, string_mapping, Match, *args, empty_es=True):
     # TODO: need to pass in flags as well
     """
     Instantiates a Syllabare_Match object
@@ -830,23 +876,21 @@ def _make_match_object(pattern, string, Match, *args, boundaries=False,
         Syllabare_Match object
     """
     # Extract pos, endpos args, if provided
-    pos_args = [0, len(string)] # re defaults
+    pos_args = [0, len(string_mapping.original)] # re defaults
     if args:
         for n, arg in enumerate(args):
             pos_args[n] = arg
-
-    ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
-    lp = Mapping(pattern)
+    ls = string_mapping
+    lp = pattern_obj
     match_obj = Syllabare_Match(
-            re = compile(pattern),
-            string = string,
+            re = lp,
+            string = ls.original,#string,
             linear = ls.linear,
             pos = pos_args[0],
             endpos = pos_args[1],
             regs = _get_regs(Match, ls),
             Match = Match,
             string_mapping = ls,
-            pattern_mapping = lp,
             empty_es = empty_es,
             )
     return match_obj 
@@ -907,11 +951,11 @@ class Syllabare_Match:
     letters to their corresponding index positions in the unlinearized
     text.
     A few additional methods are defined to allow the user to obtain data on
-    both the original and modified strings created by syllabare.
+    both the original and modified strings created by kre.
     """
     def __init__(self, endpos = None, pos = 0, re = None, regs = None,
             string = None, linear = None, Match=None,
-            string_mapping=None, pattern_mapping=None, empty_es=True):
+            string_mapping=None, empty_es=True):
        
         # underlying re.Match object 
         # contains same attributes as above but for linearized string
@@ -928,13 +972,11 @@ class Syllabare_Match:
         self.lastindex = Match.lastindex
         self.lastgroup = self._get_lastgroup()
    
-        #Supplemental in Syllabare
         self.linear = linear
         self.string_mapping = string_mapping
-        self.pattern_mapping = pattern_mapping
 
     def __repr__(self):
-        return "<Syllabare.Syllabare_Match object; span=%r, match=%r>" % (
+        return "<syllabare.Syllabare_Match object; span=%r, match=%r>" % (
                 self.span(), self.group(0))
 
     def __getitem__(self, group):
@@ -1066,9 +1108,13 @@ class Syllabare_Match:
             return inv_map[self.lastindex]
 
 def _recombine(chars):
-    # PRELIMINARY VERSION FOR TEST
-    # NEEDS TO BE ABLE TO RECOMBINE MULTIPLE KEYS
+    # PRELIMINARY VERSION FOR TESTING
+    # Simple case: chars is in dict
     if chars in MAPS["reverse"].keys():
         return MAPS["reverse"][chars]
-    else:
-        return chars
+
+    # CASE: no exact matches
+    # TODO: Create trie
+
+    # Last option: return remaining characters as is
+    return chars
