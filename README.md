@@ -23,7 +23,7 @@ Documentation on the unique features of syllabare is available in the [wiki](htt
 
 ## Examples
 
-Japanese Hiragana (mapping between hiragana and romanizaed hiragana)
+Japanese Hiragana (mapping between hiragana and romanized hiragana)
 ```
 > import syllabare as syl
 > syl.set_map('maps/hiragana.json')
