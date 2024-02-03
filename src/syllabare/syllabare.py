@@ -195,8 +195,8 @@ class Syllabare_Pattern:
         match_ = self.Pattern.search(ls.linear, *pos_args)
 
         if match_:
-            return _make_match_object(self, ls, match_,
-                    *args, empty_es=empty_es)
+            return Syllabare_Match(self, ls, match_, *args, 
+                    empty_es=empty_es)
         else:
             return match_
 
@@ -207,8 +207,8 @@ class Syllabare_Pattern:
         for span in iter_span:
             match_ = self.Pattern.match(ls.linear, *span)
             if match_:
-                return _make_match_object(self, ls, match_,
-                        *args, empty_es=empty_es)
+                return Syllabare_Match(self, ls, match_, *args, 
+                        empty_es=empty_es)
         else:
             return match_
 
@@ -219,8 +219,8 @@ class Syllabare_Pattern:
         for span in iter_span:
             match_ = self.Pattern.fullmatch(ls.linear, *span)
             if match_:
-                return _make_match_object(self, ls, match_,
-                        *args, empty_es=empty_es)
+                return Syllabare_Match(self, ls, match_, *args, 
+                        empty_es=empty_es)
         else:
             return match_
 
@@ -862,39 +862,6 @@ class Mapping:
                     '\t', self.delimited[slice(*self.lin2del_span[n])],
                     '\t\t', self.lin2orig[n], '\t\t', span_,'\t', self.original[slice(*span_)])
 
-def _make_match_object(pattern_obj, string_mapping, Match, *args, empty_es=True):
-    # TODO: need to pass in flags as well
-    """
-    Instantiates a Syllabare_Match object
-
-    Args:
-        pattern: original (unlinearized) pattern
-        string: original (unlinearized) string
-        Match: re.Match object
-
-    Returns:
-        Syllabare_Match object
-    """
-    # Extract pos, endpos args, if provided
-    pos_args = [0, len(string_mapping.original)] # re defaults
-    if args:
-        for n, arg in enumerate(args):
-            pos_args[n] = arg
-    ls = string_mapping
-    lp = pattern_obj
-    match_obj = Syllabare_Match(
-            re = lp,
-            string = ls.original,#string,
-            linear = ls.linear,
-            pos = pos_args[0],
-            endpos = pos_args[1],
-            regs = _get_regs(Match, ls),
-            Match = Match,
-            string_mapping = ls,
-            empty_es = empty_es,
-            )
-    return match_obj 
-
 
 def _get_regs(Match, linear_obj):
     # TODO: update doc
@@ -953,6 +920,27 @@ class Syllabare_Match:
     A few additional methods are defined to allow the user to obtain data on
     both the original and modified strings created by kre.
     """
+
+    def __init__(self, pattern_obj, string_mapping, Match_obj, *args,
+            empty_es=True):
+
+        self.string_mapping = string_mapping
+        # underlying re.Match object 
+        # contains same attributes as above but for linearized string
+        self.Match = Match_obj 
+        self.empty_es = empty_es
+
+        self.string = self.string_mapping.original
+        self.re = pattern_obj # Syllabare_Pattern object (syllabare.compile)
+        self._re = self.re.Pattern # re.Pattern object (re.compile)
+        self.pos, self.endpos = self._get_pos_args(*args)
+        self.regs = _get_regs(Match_obj, self.string_mapping) # tuple
+        self.lastindex = Match_obj.lastindex
+        self.lastgroup = self._get_lastgroup()
+   
+        self.linear = string_mapping.linear
+
+    """
     def __init__(self, endpos = None, pos = 0, re = None, regs = None,
             string = None, linear = None, Match=None,
             string_mapping=None, empty_es=True):
@@ -974,6 +962,7 @@ class Syllabare_Match:
    
         self.linear = linear
         self.string_mapping = string_mapping
+    """
 
     def __repr__(self):
         return "<syllabare.Syllabare_Match object; span=%r, match=%r>" % (
@@ -982,6 +971,12 @@ class Syllabare_Match:
     def __getitem__(self, group):
         return self.group(group)
 
+    def _get_pos_args(self, *args):
+        pos_args = [0, len(self.string)] # re defaults
+        if args:
+            for n, arg in enumerate(args):
+                pos_args[n] = arg
+        return pos_args
 
     def expand() -> str:
         """
