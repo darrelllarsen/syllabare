@@ -60,6 +60,7 @@ TODO:
 """
 
 import re, json
+from tools._tools import PrefixTree as Trie
 
 # Make flags from re library accessible 
 from re import (A, ASCII, DEBUG, DOTALL, I, IGNORECASE, L, LOCALE, M,
@@ -67,12 +68,17 @@ from re import (A, ASCII, DEBUG, DOTALL, I, IGNORECASE, L, LOCALE, M,
 
 MAPS = {"map": None,
         "reverse": None,
+        "trie": None,
         }
 
 def set_map(json_file):
     with open(json_file, 'r') as f:
         MAPS["map"] = json.load(f)
     MAPS["reverse"] = {value: key for key, value in MAPS["map"].items()}
+    trie = Trie()
+    for val in MAPS["map"].values():
+        trie.insert(val)
+    MAPS["trie"] = trie
 
 def validate_map(_map):
     # Disallow duplicate values
@@ -1103,13 +1109,14 @@ class Syllabare_Match:
             return inv_map[self.lastindex]
 
 def _recombine(chars):
-    # PRELIMINARY VERSION FOR TESTING
-    # Simple case: chars is in dict
-    if chars in MAPS["reverse"].keys():
-        return MAPS["reverse"][chars]
-
-    # CASE: no exact matches
-    # TODO: Create trie
-
-    # Last option: return remaining characters as is
-    return chars
+    output = ''
+    cur_string = chars
+    while cur_string != '':
+        longest_match = MAPS["trie"].longest_match(cur_string)
+        if longest_match:
+            output += MAPS["reverse"][longest_match]
+        else:
+            longest_match = cur_string[0]
+            output += longest_match
+        cur_string = cur_string[len(longest_match):]
+    return output
