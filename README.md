@@ -36,6 +36,15 @@ Japanese Hiragana (mapping between hiragana and romanized hiragana)
 'いらはにはへた'
 ```
 
+Cherokee (mapping between Cherokee syllabary and latin alphabet)
+```
+> import syllabare as syl
+> syl.set_map('syllabare/src/syllabare/maps/cherokee.json')
+# Find all symbols containing the `I` sound
+> syl.findall(r"I", "Ꭲ Ꮳ Ꮅ Ꮝ Ꭰ Ꮑ Ꮧ")
+['Ꭲ', 'Ꮅ', 'Ꮧ']
+```
+
 IPA symbols (mapping between phonetics symbols and feature descriptions)
 ```
 > import syllabare as syl
