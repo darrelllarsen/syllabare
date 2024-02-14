@@ -1,1 +1,1 @@
-from .kre import *
+from .syllabare import *
