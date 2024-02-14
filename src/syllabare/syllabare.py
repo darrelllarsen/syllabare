@@ -66,6 +66,13 @@ from tools._tools import PrefixTree as Trie
 from re import (A, ASCII, DEBUG, DOTALL, I, IGNORECASE, L, LOCALE, M,
         MULTILINE, T, TEMPLATE, U, UNICODE, VERBOSE, X)
 
+_settings = {"boundaries": False,
+        "delimiter": ";",
+        "syllabify": "minimal",
+        "empty_es": True,
+        }
+
+
 MAPS = {"map": None,
         "reverse": None,
         "trie": None,
@@ -89,24 +96,20 @@ def validate_map(_map):
 
 ### Public interface
 
-def search(pattern, string, flags=0, boundaries=False, delimiter=';',
-        empty_es=True):
-    return compile(pattern, flags).search(string, 
-            boundaries=boundaries,
-            delimiter=delimiter, empty_es=empty_es)
+def search(pattern, string, flags=0, empty_es=True, **pattern_kwargs):
+    return compile(pattern, flags, **pattern_kwargs).search(string, 
+            empty_es=empty_es)
 
-def match(pattern, string, flags=0, boundaries=False, delimiter=';', empty_es=True):
-    return compile(pattern, flags).match(string, 
-            boundaries=boundaries,
-            delimiter=delimiter, empty_es=empty_es)
+def match(pattern, string, flags=0, empty_es=True, **pattern_kwargs):
+    return compile(pattern, flags, **pattern_kwargs).match(string, 
+            empty_es=empty_es)
 
-def fullmatch(pattern, string, flags=0, boundaries=False, delimiter=';', empty_es=True):
-    return compile(pattern, flags).fullmatch(string, 
-            boundaries=boundaries,
-            delimiter=delimiter, empty_es=empty_es)
+def fullmatch(pattern, string, flags=0, empty_es=True, **pattern_kwargs):
+    return compile(pattern, flags, **pattern_kwargs).fullmatch(string, 
+            empty_es=empty_es)
 
-def sub(pattern, repl, string, count=0, flags=0, boundaries=False, 
-        delimiter=';', empty_es=True, syllabify='minimal'):
+def sub(pattern, repl, string, count=0, flags=0, empty_es=True, 
+        syllabify='minimal', **pattern_kwargs):
     """
     Returns unsubstituted characters in the same format as input (i.e.,
     as syllable characters or individual letters) except as affected by 
@@ -119,42 +122,35 @@ def sub(pattern, repl, string, count=0, flags=0, boundaries=False,
         'extended' (will attempt to combine affected characters with
             preceding/following characters to create syllables)
     """
-    return compile(pattern, flags).sub(repl, string, count=count,
-            boundaries=boundaries, 
-            delimiter=delimiter, empty_es=empty_es, 
-            syllabify=syllabify)
+    return compile(pattern, flags, **pattern_kwargs).sub(repl, string, 
+            count=count, empty_es=empty_es, syllabify=syllabify)
 
-def subn(pattern, repl, string, count=0, flags=0, boundaries=False, 
-        delimiter=';', empty_es=True, syllabify='minimal'):
+def subn(pattern, repl, string, count=0, flags=0, empty_es=True, 
+        syllabify='minimal', **pattern_kwargs):
     """
     Similar to sub(), but returns tuple with count as second element.
     """
-    return compile(pattern, flags).subn(repl, string, count=count, 
-            boundaries=boundaries,
-            delimiter=delimiter, empty_es=empty_es, 
-            syllabify=syllabify)
+    return compile(pattern, flags, **pattern_kwargs).subn(repl, string, count=count, 
+            empty_es=empty_es, syllabify=syllabify)
 
-def split(pattern, string, maxsplit=0, flags=0, boundaries=False, 
-        delimiter=';', empty_es=True):
-    return compile(pattern, flags).split(string, maxsplit=maxsplit, 
-            boundaries=boundaries, delimiter=delimiter, empty_es=empty_es,)
+def split(pattern, string, maxsplit=0, flags=0, empty_es=True, **pattern_kwargs):
+    return compile(pattern, flags, **pattern_kwargs).split(string, maxsplit=maxsplit, 
+            empty_es=empty_es,)
 
-def findall(pattern, string, flags=0, boundaries=False, delimiter=';', empty_es=True):
-    return compile(pattern, flags).findall(string, 
-            boundaries=boundaries,
-            delimiter=delimiter, empty_es=empty_es,)
+def findall(pattern, string, flags=0, empty_es=True, **pattern_kwargs):
+    return compile(pattern, flags, **pattern_kwargs).findall(string, 
+            empty_es=empty_es,)
 
-def finditer(pattern, string, flags=0, boundaries=False, delimiter=';', empty_es=True):
-    return compile(pattern, flags).finditer(string, 
-            boundaries=boundaries,
-            delimiter=delimiter, empty_es=empty_es,)
+def finditer(pattern, string, flags=0, empty_es=True, **pattern_kwargs):
+    return compile(pattern, flags, **pattern_kwargs).finditer(string, 
+            empty_es=empty_es,)
 
-def compile(pattern, flags=0):
-    return _compile(pattern, flags)
+def compile(pattern, flags=0, **pattern_kwargs):
+    return Syllabare_Pattern(pattern, flags, **pattern_kwargs)
 
 def purge():
     # note that this will purge all regular expression caches, 
-    # not just those created through kre
+    # not just those created through syllabare
     re.purge()
 
 def escape(pattern):
@@ -162,12 +158,9 @@ def escape(pattern):
 
 ### Private interface
 
-def _compile(pattern, flags):
-    return Syllabare_Pattern(pattern, flags)
-
 class Syllabare_Pattern:
-    def __init__(self, pattern, flags):
-        self.pattern = pattern #original Korean, unlinearized
+    def __init__(self, pattern, flags, **pattern_kwargs):
+        self.pattern = pattern #original REP1, unlinearized
         self.flags = flags
 
         # If also mapping pattern, need to ensure no overlap in REP1 and
@@ -178,6 +171,10 @@ class Syllabare_Pattern:
 
         self.Pattern = re.compile(self.pattern, flags) # re.Pattern obj
         self.groups = self.Pattern.groups
+        self.boundaries = pattern_kwargs.pop("boundaries",
+                _settings["boundaries"])
+        self.delimiter = pattern_kwargs.pop("delimiter",
+                _settings["delimiter"])
 
         # Extract from compiled non-linearized string so access format
         # can match input format
@@ -190,48 +187,45 @@ class Syllabare_Pattern:
     def __str__(self):
         return "syllabare.compile(%s)" % repr(self.pattern)
 
-    def search(self, string, *args, boundaries=False, delimiter=';', empty_es=True):
-        ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
-
-        return self._search(ls, *args, empty_es=empty_es)
+    def search(self, string, *args, empty_es=True):
+        sm = Mapping(string, boundaries=self.boundaries, delimiter=self.delimiter)
+        return self._search(sm, *args, empty_es=empty_es)
 
     def _search(self, string_mapping, *args, empty_es=True):
-        ls = string_mapping
-        pos_args, iter_span = self._process_pos_args(ls, *args)
-        match_ = self.Pattern.search(ls.linear, *pos_args)
-
+        sm = string_mapping
+        pos_args, iter_span = self._process_pos_args(sm, *args)
+        match_ = self.Pattern.search(sm.linear, *pos_args)
         if match_:
-            return Syllabare_Match(self, ls, match_, *args, 
-                    empty_es=empty_es)
+            return Syllabare_Match(self, sm, match_, *args, empty_es=empty_es)
         else:
             return match_
 
-    def match(self, string, *args, boundaries=False, delimiter=';', empty_es=True):
-        ls, pos_args, iter_span = self._process(string, *args,
-                boundaries=boundaries, delimiter=delimiter)
+    def match(self, string, *args, empty_es=True):
+        sm = Mapping(string, boundaries=self.boundaries, delimiter=self.delimiter)
+        pos_args, iter_span = self._process_pos_args(sm, *args)
        
         for span in iter_span:
-            match_ = self.Pattern.match(ls.linear, *span)
+            match_ = self.Pattern.match(sm.linear, *span)
             if match_:
-                return Syllabare_Match(self, ls, match_, *args, 
+                return Syllabare_Match(self, sm, match_, *args, 
                         empty_es=empty_es)
         else:
             return match_
 
-    def fullmatch(self, string, *args, boundaries=False, delimiter=';', empty_es=True):
-        ls, pos_args, iter_span = self._process(string, *args,
-                boundaries=boundaries, delimiter=delimiter)
+    def fullmatch(self, string, *args, empty_es=True):
+        sm = Mapping(string, boundaries=self.boundaries, delimiter=self.delimiter)
+        pos_args, iter_span = self._process_pos_args(sm, *args)
 
         for span in iter_span:
-            match_ = self.Pattern.fullmatch(ls.linear, *span)
+            match_ = self.Pattern.fullmatch(sm.linear, *span)
             if match_:
-                return Syllabare_Match(self, ls, match_, *args, 
+                return Syllabare_Match(self, sm, match_, *args, 
                         empty_es=empty_es)
         else:
             return match_
 
-    def sub(self, repl, string, count=0, boundaries=False, 
-            delimiter=';', empty_es=True, syllabify='minimal'):
+    def sub(self, repl, string, count=0, empty_es=True, 
+            syllabify='minimal'):
         """
         Returns unsubstituted characters in the same format as input (i.e.,
         as syllable characters or individual letters) except as affected by 
@@ -247,207 +241,185 @@ class Syllabare_Pattern:
                     boundaries prior to syllabifying string)
         """
         # Linearize string
-        ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
+        sm = Mapping(string, boundaries=self.boundaries, delimiter=self.delimiter)
 
-        return self._sub(repl, ls, count=count, empty_es=empty_es,
+        return self._sub(repl, sm, count=count, empty_es=empty_es,
                 syllabify=syllabify)
 
     def _sub(self, repl, string_mapping, count=0, empty_es=True, 
             syllabify='minimal'):
-        ls = string_mapping
-        boundaries = string_mapping.boundaries
-        delimiter = string_mapping.delimiter
-        
-        # Find the spans where substitutions will occur.
-        matches = self.finditer(ls.original, boundaries=boundaries,
-                delimiter=delimiter)
-
-        # Iterate over matches to extract subbed spans from delimited string
-
-        # For each affected syllable, store the number of subs it is
-        # involved in, and the initial and final indices of the affected
-        # characters in both the linear and mapped del spans. 
+        sm = string_mapping
         subs = dict()
-        # Strutucture: subs = {1: {'num_subs': int, 
-        #                           'del_span': tuple(start, end),
-        #                           'linear_span': tuple(start, end)},
-        #                      2: {...}, 
-        #                      ...}
+        matches = self._finditer(sm)
         
-        i = 0 # number non-overlapping sub spans (no increment for shared syllable)
-        for n, match_ in enumerate(matches):
+        def compute_spans():
+            i = 0 # number non-overlapping sub spans (no increment for shared syllable)
+            for n, match_ in enumerate(matches):
+                # limit matches to number indicated by count (0=no limit)
+                if 0 < count <= n:
+                    break
 
-            # limit matches to number indicated by count (0=no limit)
-            if 0 < count <= n:
-                break
+                lin_span = match_.Match.span()
+                del_span = get_corresponding_del_span(lin_span)
 
-            #span = match_.span()
-            map_ = match_.string_mapping
-            orig_span = match_.span()
-            lin_span = match_.Match.span()
-            del_span = (map_.lin2del[lin_span[0]],
-                    map_.lin2del[lin_span[1]-1]+1)
+                i = add_spans(subs, i, lin_span, del_span)
 
-            orig_string = match_.string
-            lin_string = match_.Match.string
-            del_string = match_.string_mapping.delimited
-           
-            """
-            # FOR DEBUGGING
-            print_dict = [
-                    {"level": "orig", 
-                        "span": orig_span,
-                        "match": orig_string[slice(*orig_span)],
-                        "string": orig_string,
-                        },
-                    {"level": "del",
-                        "span": del_span, 
-                        "match": del_string[slice(*del_span)],
-                        "string": del_string,
-                        },
-                    {"level": "linear", 
-                        "span": lin_span, 
-                        "match": lin_string[slice(*lin_span)],
-                        "string": lin_string,
-                        },
-                    ]
-            print('\t'.join(key for key in print_dict[0].keys()))
-            for item in print_dict:
-                print('\t'.join(str(val) for val in item.values()))
-            print('-'*30)
-            """
-
+        def get_corresponding_del_span(lin_span):
             # Case of empty string match at end of string
-            #if span[0] == len(ls.linear):
-            #    start = len(ls.linear) # why linear and not del, like below?
+            if lin_span[0] == len(sm.linear):
+                del_span = tuple([sm.lin2del[lin_span[0]-1]+1]*2)
+
             # Normal case
-            #else:
-            #    start = ls.lin2del[span[0]]
-            #end = ls.lin2del[span[1]-1]+1
+            else:
+                del_span = (sm.lin2del[lin_span[0]],
+                    sm.lin2del[lin_span[1]-1]+1)
+            return del_span
 
-
-            # Were there multiple subs from the same syllable?
+        def add_spans(subs, i, lin_span, del_span):
+            # CASE: multiple subs from same syllable
             if i > 0 and subs[i-1]['del_span'][1] > del_span[0]:
-                # increment number of subs for this syllable
-                subs[i-1]['num_subs'] += 1
+                prev = subs[i-1]
+                prev['num_subs'] += 1
 
-                # update the end pos of the affected del_span
-                subs[i-1]['del_span'] = (
-                        subs[i-1]['del_span'][0], del_span[1])
+                # update endpos
+                prev['del_span'] = (prev['del_span'][0], del_span[1])
+                prev['lin_span'] = (prev['lin_span'][0], lin_span[1])
 
-                # update the end pos of the associated linear_span
-                subs[i-1]['linear_span'] = (
-                        subs[i-1]['linear_span'][0], lin_span[1])
+            # DEFAULT CASE:
             else:
                 subs[i] = dict()
                 sub = subs[i]
                 sub['num_subs'] = 1
                 sub['del_span'] = del_span
-                #sub['linear_span'] = span
-                sub['linear_span'] = lin_span#match_.Match.span()
+                sub['lin_span'] = lin_span
                 i += 1
-        # Keep track of extra letters in the subbed syllables which
-        # preceded/followed the actual substitution
-        for sub in subs.values():
-            sub_start, sub_end = sub['linear_span']
+            return i
 
-            # Case: string-final empty string match
-            if sub_start == len(ls.linear):
-                syl_start = len(ls.linear)
-            # Normal case
-            else:
-                syl_start = ls._get_syl_start(sub_start)
-            syl_end = ls._get_syl_end(sub_end-1)
+        def get_outlying_chars():
+            # Keep track of extra letters in the subbed syllables which
+            # preceded/followed the actual substitution
+            for sub in subs.values():
+                sub_start, sub_end = sub['lin_span']
 
-            pre_sub_letters = ls.linear[syl_start:sub_start]
-            post_sub_letters = ls.linear[sub_end:syl_end]
-
-            sub['extra_letters'] = (pre_sub_letters,post_sub_letters)
-
-        # Extract the text from the unchanged indices so we can return them
-        # without change. (If we use tools.syllabify to reconstruct the entire
-        # string, inputs like 가ㅎ (linearized to ㄱㅏㅎ) would be returned 
-        # as 갛 even if they weren't matches for substitution. We want to 
-        # avoid this.) 
-        safe_text = []
-        for n in range(len(subs) + 1):
-            start = 0 if n == 0 else subs[n-1]['del_span'][1]
-            end = len(ls.delimited) if n == len(subs) else subs[n]['del_span'][0]
-            safe_text.append(ls.delimited[start:end])
-
-        # Carry out substitutions one by one* to identify the indices of each 
-        # changed section. *Multiple subs affecting same syllable are
-        # carried out at same time.
-        extra = 0 # Tracks added/substracted number of letters after sub
-        prev_string = ls.linear
-        num_subs = 0 # For carrying out subs incrementally
-        for sub in subs.values():
-            # Carry out next substitution(s)
-            num_subs = num_subs + sub['num_subs']
-            subbed_string = self.Pattern.sub(repl, ls.linear,
-                    count=num_subs)
-
-            # Calculate the start and end indices of the inserted substitution
-            sub_start = sub['linear_span'][0] + extra
-            extra += len(subbed_string) - len(prev_string)
-            sub_end = sub['linear_span'][1] + extra
-
-            # Combine the substitution(s) with the extra letters from
-            # affected syllables
-            syl_text = sub['extra_letters'][0]
-            syl_text += subbed_string[sub_start:sub_end]
-            syl_text += sub['extra_letters'][1]
-            sub['subbed_syl'] = syl_text
-
-            prev_string = subbed_string
-
-        # Attempt to construct Hangul characters to the desired degree of 
-        # syllabification.
-        output = ''
-        for n in range(len(safe_text)):
-            output += safe_text[n]
-            if n < len(subs):
-                new_text = subs[n]['subbed_syl']
-                if syllabify == 'minimal': 
-                    output += _recombine(new_text)
-                elif syllabify == 'extended':
-                    new_text = Mapping(new_text).linear
-                    if safe_text[n+1]:
-                        post = safe_text[n+1][0]
-                        safe_text[n+1] = safe_text[n+1][1:]
-                        post = _recombine(post)
-                        new_text += post
-                    if output:
-                        pre = output[-1]
-                        output = output[:-1]
-                        pre = _recombine(pre)
-                        new_text = pre + new_text
-                    output += _recombine(new_text)
+                # Case: string-final empty string match
+                if sub_start == len(sm.linear):
+                    syl_start = len(sm.linear)
+                # Normal case
                 else:
-                    output += new_text
+                    syl_start = sm._get_syl_start(sub_start)
+                syl_end = sm._get_syl_end(sub_end-1)
 
-        # Remove the delimiter from the output
-        # This should precede 'full' syllabify option
-        if boundaries == True:
-            output = output.replace(delimiter, '')
+                pre_sub_letters = sm.linear[syl_start:sub_start]
+                post_sub_letters = sm.linear[sub_end:syl_end]
 
-        if syllabify == 'full':
-            output = _recombine(Mapping(output).linear)
+                sub['extra_letters'] = (pre_sub_letters,post_sub_letters)
+           
+        def extract_unchanged_spans():
+            # Extract the text from the unchanged indices so we can return them
+            # without change. (If we use tools.syllabify to reconstruct the entire
+            # string, inputs like 가ㅎ (linearized to ㄱㅏㅎ) would be returned 
+            # as 갛 even if they weren't matches for substitution. We want to 
+            # avoid this.) 
+            unchanged_text = []
+            for n in range(len(subs) + 1):
+                start = 0 if n == 0 else subs[n-1]['del_span'][1]
+                end = len(sm.delimited) if n == len(subs) else subs[n]['del_span'][0]
+                unchanged_text.append(sm.delimited[start:end])
+            return unchanged_text
 
-        if syllabify == 'none':
-            pass
+        def make_substitutions():
+            # Carry out substitutions one by one* to identify the indices of each 
+            # changed section. *Multiple subs affecting same syllable are
+            # carried out at same time.
+            extra = 0 # Tracks added/substracted number of letters after sub
+            prev_string = sm.linear
+            num_subs = 0 # For carrying out subs incrementally
+            for sub in subs.values():
+                # Carry out next substitution(s)
+                num_subs = num_subs + sub['num_subs']
+                subbed_string = self.Pattern.sub(repl, sm.linear,
+                        count=num_subs)
+
+                # Calculate the start and end indices of the inserted substitution
+                sub_start = sub['lin_span'][0] + extra
+                extra += len(subbed_string) - len(prev_string)
+                sub_end = sub['lin_span'][1] + extra
+
+                # Combine the substitution(s) with the extra letters from
+                # affected syllables
+                syl_text = sub['extra_letters'][0]
+                syl_text += subbed_string[sub_start:sub_end]
+                syl_text += sub['extra_letters'][1]
+                sub['subbed_syl'] = syl_text
+
+                prev_string = subbed_string
+
+        def reconstruct():
+            # Attempt to construct Hangul characters to the desired degree of 
+            # syllabification.
+            output = ''
+            for n in range(len(unchanged_text)):
+                output += unchanged_text[n]
+                if n < len(subs):
+                    new_text = subs[n]['subbed_syl']
+                    if syllabify == 'minimal': 
+                        output += _recombine(new_text)
+                    elif syllabify == 'extended':
+
+                        # Previously used following:
+                        # new_text = Mapping(new_text).linear
+                        # changed in kre due to recombine function;
+                        # need to consider best way to handle extended
+                        # in syllabare, given the range of possible
+                        # mappings
+                        
+                        # Remove one character from the unchanged text
+                        # that follows the current substitution. The 
+                        # character will be in original (nonlinearized)
+                        # form
+                        if unchanged_text[n+1] != '':
+                            post = unchanged_text[n+1][0]
+                            unchanged_text[n+1] = unchanged_text[n+1][1:]
+                            post = _recombine(post)
+                            new_text += post
+                        # Remove the character immediately preceding the
+                        # current substitutions. The character will have
+                        # been syllabified in the previous loop.
+                        if output:
+                            pre = output[-1]
+                            output = output[:-1]
+                            pre = _recombine(pre)
+                            new_text = pre + new_text
+                        output += _recombine(new_text)
+                    else:
+                        output += new_text
+
+            # Remove the delimiter from the output
+            # This should precede 'full' syllabify option
+            if sm.boundaries == True:
+                output = output.replace(sm.delimiter, '')
+
+            if syllabify == 'full':
+                output = _recombine(Mapping(output).linear)
+
+            if syllabify == 'none':
+                pass
+            return output
+
+        ### MAIN
+        compute_spans()
+        get_outlying_chars()
+        unchanged_text = extract_unchanged_spans()
+        make_substitutions()
+        output = reconstruct()
 
         return output
 
-    def subn(self, repl, string, count=0, boundaries=False, 
-            delimiter=';', empty_es=True, syllabify='minimal'):
-        ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
+    def subn(self, repl, string, count=0, empty_es=True, syllabify='minimal'):
+        sm = Mapping(string, boundaries=self.boundaries, delimiter=self.delimiter)
         
-        # Must limit substitutions to max of count if != 0
-        res = self._findall(ls, empty_es=empty_es)
-        #res = self.findall(string,
-        #    boundaries=boundaries, delimiter=delimiter,
-        #    empty_es=empty_es)
+        # Limit substitutions to max of count if != 0
+        res = self._findall(sm, empty_es=empty_es)
         if res:
             sub_count = len(res)
         else:
@@ -455,85 +427,38 @@ class Syllabare_Pattern:
         if 0 < count < sub_count:
             sub_count = count
 
-        return (self._sub(repl, ls, count=count, empty_es=empty_es, 
+        return (self._sub(repl, sm, count=count, empty_es=empty_es, 
             syllabify=syllabify), sub_count)
 
-    def split(self, string, maxsplit=0, boundaries=False, 
-            delimiter=';', empty_es=True):
+    def split(self, string, maxsplit=0, empty_es=True):
         raise NotImplementedError 
 
-    def findall(self, string, *args, boundaries=False, delimiter=';', empty_es=True):
-        ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
-        return self._findall(ls, *args, empty_es=empty_es)
+    def findall(self, string, *args, empty_es=True):
+        sm = Mapping(string, boundaries=self.boundaries, delimiter=self.delimiter)
+        return self._findall(sm, *args, empty_es=empty_es)
 
     def _findall(self, string_mapping, *args, empty_es=True):
-        ls = string_mapping
-        string = ls.original
-        pos_args, _ = self._process_pos_args(ls, *args)
+        matches = self._finditer(string_mapping, *args,
+                empty_es=empty_es)
+        return [match_.group() for match_ in matches] or None
 
-        match_ = self.Pattern.findall(ls.linear, *pos_args)
+    def finditer(self, string, *args, empty_es=True):
+        sm = Mapping(string, boundaries=self.boundaries, delimiter=self.delimiter)
+        return self._finditer(sm, *args, empty_es=empty_es)
 
-        # For all patterns found, find their position in the original text
-        # and return the syllable(s) they are part of
-        if match_:
-            pos = pos_args[0]
-            match_list = []
-            for item in match_:
-                sub_match = self.Pattern.search(ls.linear, pos)
+    def _finditer(self, string_mapping, *args, empty_es=True):
+        sm = string_mapping
+        pos_args, _ = self._process_pos_args(sm, *args)
 
-                source_string_span = _get_regs(sub_match, ls)[0]
-                match_list.append(
-                        string[slice(*source_string_span)]
-                        )
-
-                # Update start pos for next iteration.
-                pos = sub_match.span()[1]
-
-                # Was the match an empty string?
-                if sub_match.span()[0] == sub_match.span()[1]:
-                    # Increment pos manually
-                    pos += 1
-                    # Ensure syllable-internal empty strings matches
-                    # remain empty, if wanted
-                    if empty_es == True:
-                        match_list[-1] = ''
-
-            return match_list
-        else:
-            return None
-
-    def finditer(self, string, *args, boundaries=False, delimiter=';', empty_es=True):
-        ls, pos_args, _ = self._process(string, *args,
-                boundaries=boundaries, delimiter=delimiter)
-
-        match_ = self.Pattern.finditer(ls.linear, *pos_args)
+        match_ = self.Pattern.finditer(sm.linear, *pos_args)
 
         # For all re.Match objects in match_
-        if match_:
-            pos = pos_args[0]
-            match_list = []
-            for item in match_:
-                sub_match = self._search(ls, pos)
-                match_list.append(sub_match)
-                pos = sub_match.span()[1]
-
-                # Was the match an empty string?
-                if sub_match.span()[0] == sub_match.span()[1]:
-                    # Increment pos manually
-                    pos += 1
-            return iter(match_list)
-        else:
-            return None
-
-    def _process(self, string, *args, boundaries, delimiter):
-        """
-        Perform processes common to search, match, fullmatch, findall,
-        and finditer
-        """
-        ls = Mapping(string, boundaries=boundaries, delimiter=delimiter)
-        pos_args, iter_span = self._process_pos_args(ls, *args)
-
-        return ls, pos_args, iter_span
+        match_list = []
+        for item in match_:
+            cur_match = item
+            match_list.append(Syllabare_Match(self, sm, 
+                cur_match, *args, empty_es=empty_es))
+        return iter(match_list)
 
     def _process_pos_args(self, _linear, *args):
         """
@@ -654,9 +579,11 @@ class Mapping:
         - use abbreviations exclusively within functions
         - use full name as class attribute
     """
-    def __init__(self, string, boundaries=False, delimiter=';'):
-        self.boundaries = boundaries
-        self.delimiter = delimiter
+    def __init__(self, string, **kwargs):
+        self.boundaries = kwargs.get("boundaries",
+        _settings["boundaries"])
+        self.delimiter = kwargs.get("delimiter",
+        _settings["delimiter"])
 
         # levels of representation and mappings
         self.original = string
@@ -945,30 +872,6 @@ class Syllabare_Match:
         self.lastgroup = self._get_lastgroup()
    
         self.linear = string_mapping.linear
-
-    """
-    def __init__(self, endpos = None, pos = 0, re = None, regs = None,
-            string = None, linear = None, Match=None,
-            string_mapping=None, empty_es=True):
-       
-        # underlying re.Match object 
-        # contains same attributes as above but for linearized string
-        self.Match = Match 
-        self.empty_es = empty_es
-
-        self.string = string
-        self.pos = pos #int
-        # re, _re are based on non-linearized pattern
-        self.re = re # Syllabare_Pattern object (syllabare.compile)
-        self._re = self.re.Pattern #SRE_Pattern (re.compile)
-        self.regs = regs #tuple
-        self.endpos =  endpos # int
-        self.lastindex = Match.lastindex
-        self.lastgroup = self._get_lastgroup()
-   
-        self.linear = linear
-        self.string_mapping = string_mapping
-    """
 
     def __repr__(self):
         return "<syllabare.Syllabare_Match object; span=%r, match=%r>" % (
