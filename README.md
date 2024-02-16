@@ -13,7 +13,9 @@ portions are mapped back to characters available in REP1, when possible.
 Syllabare_Match objects are designed to behave like re.Match objects, 
 with a few additional attributes.  As such, the output of this library 
 may usually be handled in the same manner as the output of the standard 
-re library. 
+re library.
+
+Note: syllabare is a recent adaptation of [kre](https://github.com/darrelllarsen/kre) and is currently in the alpha phase of development.
 
 ## Documentation
 
